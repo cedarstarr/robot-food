@@ -1,0 +1,67 @@
+import { NextRequest } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import Anthropic from '@anthropic-ai/sdk'
+
+export const maxDuration = 60
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const actionPrompts: Record<string, (recipe: any, options: any) => string> = {
+  lower_calories: () => `Modify this recipe to reduce calories by at least 20% while keeping it delicious. Use lower-calorie substitutions (e.g., Greek yogurt for cream, lean meats, reduce oil). Show the modified recipe in full with all ingredients and steps.`,
+  reduce_fat: () => `Modify this recipe to significantly reduce fat content. Replace high-fat ingredients with lower-fat alternatives. Show the complete modified recipe.`,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  change_servings: (recipe: any, { targetServings }: any) => `Adapt this recipe from ${recipe.servings} servings to ${targetServings} servings. Adjust all ingredient quantities proportionally. Show the complete modified recipe.`,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  change_method: (_: any, { targetMethod }: any) => `Rewrite this recipe to use ${targetMethod} cooking instead of the original method. Adjust times, temperatures, and any technique-specific instructions. Show the complete modified recipe.`,
+}
+
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth()
+  if (!session) return new Response('Unauthorized', { status: 401 })
+
+  const { id } = await params
+  const recipe = await prisma.recipe.findFirst({
+    where: { id, userId: session.user.id }
+  })
+  if (!recipe) return new Response('Not found', { status: 404 })
+
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return new Response('AI service not configured', { status: 503 })
+
+  const body = await req.json()
+  const { action, targetServings, targetMethod } = body
+
+  const actionPrompt = actionPrompts[action]
+  if (!actionPrompt) return new Response('Invalid action', { status: 400 })
+
+  const anthropic = new Anthropic({ apiKey })
+
+  const stream = await anthropic.messages.stream({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 2048,
+    system: 'You are an expert chef who helps people modify recipes. Present modifications clearly in markdown.',
+    messages: [{
+      role: 'user',
+      content: `Here is the current recipe:\n${recipe.rawText}\n\n${actionPrompt(recipe, { targetServings, targetMethod })}`
+    }]
+  })
+
+  const encoder = new TextEncoder()
+  const readable = new ReadableStream({
+    async start(controller) {
+      try {
+        for await (const chunk of stream) {
+          if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+            controller.enqueue(encoder.encode(chunk.delta.text))
+          }
+        }
+      } finally {
+        controller.close()
+      }
+    }
+  })
+
+  return new Response(readable, {
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' }
+  })
+}

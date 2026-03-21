@@ -22,6 +22,7 @@ function addSecurityHeaders(response: NextResponse) {
 const PUBLIC_PATHS = [
   '/login', '/signup', '/forgot-password', '/reset-password',
   '/verify-email', '/unsubscribe',
+  '/privacy', '/terms',
   '/api/auth',
   '/api/health',
   '/_next', '/favicon.ico', '/robots.txt', '/sitemap.xml',

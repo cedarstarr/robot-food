@@ -70,9 +70,10 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  accounts Account[]
-  sessions Session[]
-  recipes  Recipe[]
+  accounts   Account[]
+  sessions   Session[]
+  recipes    Recipe[]
+  mealPlans  MealPlan[]
 
   @@index([email])
   @@map("users")
@@ -124,8 +125,39 @@ model Recipe {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  mealPlanSlots MealPlanSlot[]
+
   @@index([userId])
   @@map("recipes")
+}
+
+model MealPlan {
+  id        String         @id @default(cuid())
+  userId    String         @map("user_id")
+  weekStart DateTime       @map("week_start")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slots     MealPlanSlot[]
+
+  @@unique([userId, weekStart])
+  @@index([userId])
+  @@map("meal_plans")
+}
+
+model MealPlanSlot {
+  id         String   @id @default(cuid())
+  mealPlanId String   @map("meal_plan_id")
+  dayOfWeek  Int      @map("day_of_week")
+  mealType   String   @map("meal_type")
+  recipeId   String   @map("recipe_id")
+  mealPlan   MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  recipe     Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([mealPlanId, dayOfWeek, mealType])
+  @@index([mealPlanId])
+  @@index([recipeId])
+  @@map("meal_plan_slots")
 }
 
 model JobRun {

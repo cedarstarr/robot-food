@@ -7,13 +7,14 @@ import { useSession, signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils'
 import {
   ChefHat, BookOpen, LayoutDashboard, Settings, Shield,
-  LogOut, Menu, X,
+  LogOut, Menu, X, CalendarDays,
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
 
 const NAV_LINKS = [
   { href: '/kitchen', label: 'Kitchen', icon: ChefHat },
   { href: '/saved', label: 'Saved Recipes', icon: BookOpen },
+  { href: '/meal-plan', label: 'Meal Plan', icon: CalendarDays },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]

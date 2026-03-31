@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ModificationToolbar } from './modification-toolbar'
+import { GroceryListSheet } from './grocery-list-sheet'
 import { Clock, Users, ChevronLeft, Loader2, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -121,6 +122,11 @@ export function RecipeDetailClient({ recipe }: Props) {
             {recipe.servings} servings
           </span>
         </div>
+      </div>
+
+      {/* Actions row */}
+      <div className="flex flex-wrap items-center gap-2">
+        <GroceryListSheet ingredients={recipeData.ingredients ?? []} />
       </div>
 
       {/* Modification toolbar */}

@@ -1,0 +1,80 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+
+// GET /api/meal-plan?weekStart=YYYY-MM-DD
+export async function GET(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const weekStart = req.nextUrl.searchParams.get('weekStart')
+  if (!weekStart) return NextResponse.json({ error: 'weekStart is required' }, { status: 400 })
+
+  const date = new Date(weekStart)
+  if (isNaN(date.getTime())) {
+    return NextResponse.json({ error: 'Invalid weekStart date' }, { status: 400 })
+  }
+
+  const plan = await prisma.mealPlan.findUnique({
+    where: { userId_weekStart: { userId: session.user.id, weekStart: date } },
+    include: {
+      slots: {
+        include: {
+          recipe: {
+            select: { id: true, title: true, cuisine: true, difficulty: true },
+          },
+        },
+      },
+    },
+  })
+
+  return NextResponse.json(plan ?? { slots: [] })
+}
+
+// PUT /api/meal-plan — upsert a slot
+export async function PUT(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await req.json()
+  const { weekStart, dayOfWeek, mealType, recipeId } = body as {
+    weekStart: string
+    dayOfWeek: number
+    mealType: string
+    recipeId: string
+  }
+
+  if (!weekStart || dayOfWeek === undefined || !mealType || !recipeId) {
+    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+  }
+
+  const date = new Date(weekStart)
+  if (isNaN(date.getTime())) {
+    return NextResponse.json({ error: 'Invalid weekStart date' }, { status: 400 })
+  }
+
+  // Verify recipe belongs to the user
+  const recipe = await prisma.recipe.findFirst({
+    where: { id: recipeId, userId: session.user.id },
+  })
+  if (!recipe) return NextResponse.json({ error: 'Recipe not found' }, { status: 404 })
+
+  // Upsert the meal plan
+  const plan = await prisma.mealPlan.upsert({
+    where: { userId_weekStart: { userId: session.user.id, weekStart: date } },
+    create: { userId: session.user.id, weekStart: date },
+    update: {},
+  })
+
+  // Upsert the slot
+  const slot = await prisma.mealPlanSlot.upsert({
+    where: { mealPlanId_dayOfWeek_mealType: { mealPlanId: plan.id, dayOfWeek, mealType } },
+    create: { mealPlanId: plan.id, dayOfWeek, mealType, recipeId },
+    update: { recipeId },
+    include: {
+      recipe: { select: { id: true, title: true, cuisine: true, difficulty: true } },
+    },
+  })
+
+  return NextResponse.json(slot)
+}

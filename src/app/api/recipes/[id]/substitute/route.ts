@@ -33,30 +33,42 @@ export async function POST(
 
   const anthropic = new Anthropic({ apiKey })
 
-  const recipeData = recipe.recipeData as { title?: string; ingredients?: string[]; instructions?: string[] }
+  interface RecipeDataShape {
+    title?: string
+    ingredients?: Array<{ name: string; amount: string; unit: string }>
+    steps?: string[]
+  }
+  const recipeData = recipe.recipeData as RecipeDataShape
+
+  const ingredientList = recipeData.ingredients
+    ? recipeData.ingredients.map(i => `${i.amount} ${i.unit} ${i.name}`.trim()).join(', ')
+    : recipe.sourceIngredients.join(', ')
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 500,
-    system: `You are a professional chef. Suggest ingredient substitutions for a recipe. Respond with JSON:
+    max_tokens: 800,
+    system: `You are a professional chef and food scientist. Analyze the role an ingredient plays in a recipe and suggest practical substitutions. Respond with valid JSON only, no markdown fences:
 {
+  "role": "one sentence describing what role this ingredient plays (e.g., binder, acid, fat, leavener, flavor base)",
   "substitutions": [
     {
       "name": "substitute ingredient name",
-      "quantity": "adjusted quantity",
-      "notes": "how it changes the dish",
-      "similarity": "high|medium|low"
+      "quantity": "adjusted quantity with unit",
+      "flavorImpact": "how it changes the flavor (1-2 sentences)",
+      "textureImpact": "how it changes the texture (1 sentence)",
+      "confidence": "works_great" | "works_ok" | "last_resort",
+      "techniqueNote": "any technique adjustment needed, or null"
     }
   ],
-  "tip": "brief chef's note about the swap"
+  "tip": "brief chef's tip about the substitution"
 }`,
     messages: [{
       role: 'user',
       content: `Recipe: ${recipeData.title || recipe.title}
-Ingredients: ${(recipeData.ingredients || recipe.sourceIngredients).join(', ')}
-Missing: ${missingIngredient}
+All ingredients: ${ingredientList}
+Missing ingredient: ${missingIngredient}
 
-Suggest 2-3 substitutions for "${missingIngredient}" that work in this specific recipe context.`,
+Analyze what role "${missingIngredient}" plays in this specific recipe and suggest 2-3 substitutions ordered from best to last resort.`,
     }],
   })
 
@@ -66,5 +78,9 @@ Suggest 2-3 substitutions for "${missingIngredient}" that work in this specific 
     return NextResponse.json({ error: 'Failed to parse substitutions' }, { status: 500 })
   }
 
-  return NextResponse.json(JSON.parse(jsonMatch[0]))
+  try {
+    return NextResponse.json(JSON.parse(jsonMatch[0]))
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON from AI' }, { status: 500 })
+  }
 }

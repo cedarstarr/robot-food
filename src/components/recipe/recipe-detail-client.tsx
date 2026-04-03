@@ -6,7 +6,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ModificationToolbar } from './modification-toolbar'
 import { GroceryListSheet } from './grocery-list-sheet'
-import { Clock, Users, ChevronLeft, Loader2, BookOpen } from 'lucide-react'
+import { SubstitutionPanel } from './substitution-panel'
+import { Clock, Users, ChevronLeft, Loader2, BookOpen, HelpCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Ingredient {
@@ -58,6 +59,19 @@ export function RecipeDetailClient({ recipe }: Props) {
   const nutrition = recipe.nutrition as RecipeData['nutrition'] | null
   const [modifiedText, setModifiedText] = useState('')
   const [isModifying, setIsModifying] = useState(false)
+
+  // Substitution panel state
+  const [substitutingIngredient, setSubstitutingIngredient] = useState<Ingredient | null>(null)
+  // Quick-swap overrides: map from original ingredient name → swapped-in display string
+  const [swappedIngredients, setSwappedIngredients] = useState<Map<string, string>>(new Map())
+
+  const handleSwap = (original: Ingredient, substitute: { name: string; quantity: string }) => {
+    setSwappedIngredients(prev => {
+      const next = new Map(prev)
+      next.set(original.name, `${substitute.quantity} ${substitute.name}`)
+      return next
+    })
+  }
 
   const totalMin = (recipe.prepTimeMin || 0) + (recipe.cookTimeMin || 0)
 
@@ -155,16 +169,67 @@ export function RecipeDetailClient({ recipe }: Props) {
       <section>
         <h2 className="text-xl font-semibold text-foreground mb-4">Ingredients</h2>
         <ul className="space-y-2">
-          {recipeData.ingredients?.map((ing, i) => (
-            <li key={i} className="flex items-start gap-3 py-1.5 border-b border-border/50 last:border-0">
-              <span className="text-primary font-medium text-sm w-20 shrink-0 text-right">
-                {ing.amount} {ing.unit}
-              </span>
-              <span className="text-foreground text-sm">{ing.name}</span>
-            </li>
-          ))}
+          {recipeData.ingredients?.map((ing, i) => {
+            const swapped = swappedIngredients.get(ing.name)
+            return (
+              <li
+                key={i}
+                className={cn(
+                  'flex items-center gap-3 py-1.5 border-b border-border/50 last:border-0 group',
+                  swapped && 'opacity-75',
+                )}
+              >
+                <span className={cn(
+                  'font-medium text-sm w-20 shrink-0 text-right',
+                  swapped ? 'text-muted-foreground line-through' : 'text-primary',
+                )}>
+                  {ing.amount} {ing.unit}
+                </span>
+                <span className={cn(
+                  'text-foreground text-sm flex-1',
+                  swapped && 'line-through text-muted-foreground',
+                )}>
+                  {ing.name}
+                </span>
+                {swapped ? (
+                  <span className="text-xs text-primary font-medium bg-primary/10 rounded-md px-2 py-0.5 shrink-0">
+                    → {swapped}
+                  </span>
+                ) : null}
+                <button
+                  onClick={() => setSubstitutingIngredient(ing)}
+                  title={`I'm missing ${ing.name}`}
+                  className={cn(
+                    'shrink-0 rounded-md p-1 text-muted-foreground transition-colors',
+                    'hover:text-primary hover:bg-primary/10',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+                  )}
+                  aria-label={`Substitute for ${ing.name}`}
+                >
+                  <HelpCircle className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            )
+          })}
         </ul>
+        {swappedIngredients.size > 0 && (
+          <button
+            onClick={() => setSwappedIngredients(new Map())}
+            className="mt-3 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+          >
+            Reset all substitutions
+          </button>
+        )}
       </section>
+
+      {/* Substitution panel */}
+      <SubstitutionPanel
+        recipeId={recipe.id}
+        ingredient={substitutingIngredient}
+        onClose={() => setSubstitutingIngredient(null)}
+        onSwap={handleSwap}
+      />
 
       {/* Instructions */}
       <section>

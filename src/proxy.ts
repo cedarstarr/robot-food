@@ -32,11 +32,6 @@ const PUBLIC_PATHS = [
 export default auth(async function middleware(request: NextAuthRequest) {
   const pathname = request.nextUrl.pathname
 
-  // Landing page is public
-  if (pathname === '/') {
-    return addSecurityHeaders(NextResponse.next())
-  }
-
   // Allow public paths without auth
   const isPublic = PUBLIC_PATHS.some(p => pathname.startsWith(p))
   if (!isPublic && !request.auth) {
